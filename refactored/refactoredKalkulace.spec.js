@@ -1,26 +1,102 @@
 // tests/windowCalculator.spec.js
 const { test, expect } = require('@playwright/test');
 
+// helper funkce pro zavření elementu, pokud je viditelný
+async function closeIfVisible(locator) {
+  if (await locator.isVisible()) {
+    await locator.click();
+    await locator.waitFor({ state: 'hidden' });
+  }
+
+}
+/**
+ * Kliknutí na tlačítko přes CSS selektor
+ * @param {import('@playwright/test').Page} page - Playwright page objekt
+ * @param {string} selector - CSS selektor tlačítka
+ */
+async function clickBySelector(page, selector) {
+  const button = page.locator(selector);
+  await button.waitFor({ state: 'visible' });
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+}
+
+/**
+ * Kliknutí na tlačítko přes XPath
+ * @param {import('@playwright/test').Page} page - Playwright page objekt
+ * @param {string} xpath - XPath tlačítka
+ */
+async function clickByXPath(page, xpath) {
+  const button = page.locator(xpath);
+  await button.waitFor({ state: 'visible' });
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+}
+
+/**
+ * Klikne na tlačítko a počká, až zmizí loader
+ * @param {import('@playwright/test').Page} page
+ * @param {string} buttonSelector
+ * @param {string} loaderSelector
+ */
+async function clickAndWaitForLoader(page, buttonSelector, loaderSelector = '.loading-spinner') {
+  const button = page.locator(buttonSelector);
+  const loader = page.locator(loaderSelector);
+
+  await button.waitFor({ state: 'visible' });
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+
+  // Počkej, až loader zmizí (pokud existuje)
+  if (await loader.count() > 0) {
+    await loader.waitFor({ state: 'hidden', timeout: 20000 });
+  }
+}
+
+/**
+ * Odeslání formuláře a ověření úspěchu.
+ * @param {import('@playwright/test').Page} page - Playwright page objekt
+ * @param {string} buttonSelector - CSS nebo XPath tlačítka pro odeslání
+ * @param {string} successText - Text, který se má objevit při úspěchu
+ * @param {string} loaderSelector - Selektor loaderu (pokud stránka používá AJAX)
+ */
+async function submitAndVerify(page, buttonSelector, successText, loaderSelector = '.loading-spinner') {
+  const submitBtn = page.locator(buttonSelector);
+  const successMessage = page.locator(`text=${successText}`);
+  const loader = page.locator(loaderSelector);
+
+  // počkej, až je tlačítko viditelné
+  await submitBtn.waitFor({ state: 'visible' });
+  
+  // scrolluj k tlačítku
+  await submitBtn.scrollIntoViewIfNeeded();
+
+  // klikni na tlačítko
+  await submitBtn.click();
+
+  // počkej, až loader zmizí (timeout 20 s)
+  await loader.waitFor({ state: 'hidden', timeout: 20000 });
+
+  // ověř, že se zobrazil úspěšný text
+  await expect(successMessage).toBeVisible();
+}
+
 test('kalkulačka oken - základní výpočet', async ({ page }) => {
   // 1️⃣ Otevřít stránku kalkulačky
   await page.goto('https://kalkulace.oknapresinternet.cz/');
 
-  // zavřít cookie banner, pokud je viditelný
-const consentButton = page.locator('a[data-role="b_agree"]');
+  // zavřít cookie banner
+  const consentButton = page.locator('a[data-role="b_agree"]');
+  await closeIfVisible(consentButton);
 
-if (await consentButton.isVisible()) {
-  await consentButton.click();
-  // počkat, až banner zmizí
-  await page.waitForSelector('a[data-role="b_agree"]', { state: 'detached' });
-}
-// vitejte
-  // Počkej, až se modal zobrazí
+  // zavřít welcome modal
+  const welcomeDialog = page.locator('#welcome-dialog');
   await page.waitForSelector('#welcome-dialog', { state: 'visible', timeout: 5000 });
-    // Klikni na zavírací tlačítko
-  await page.click('.close-modal');
+  const closeModalButton = page.locator('.close-modal');
+  await closeIfVisible(closeModalButton);
 
-  // Ověř, že modal zmizel
-  await expect(page.locator('#welcome-dialog')).toBeHidden();
+  // ověření, že modal zmizel
+  await expect(welcomeDialog).toBeHidden();
 
     // 3️⃣ Kliknout na IGLO EDGE
   await page.waitForSelector('#system52', { state: 'visible' });
@@ -41,13 +117,7 @@ await page.fill('input[name="1_height"]', '150');  // výška 150 cm
 
   // 8️⃣ Kliknout na button "postup na krok → 3. Barva"
 // Locator pomocí XPath
-const nextButton = page.locator('//*[@id="snippet--prevAndNextStep"]/div[3]/a/button');
-
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickByXPath(page, '//*[@id="snippet--prevAndNextStep"]/div[3]/a/button');
 
 //volba barvy okna ořech
 await page.waitForSelector('.color-circle.hover-image[data-image="/dist/img/color/medium/orzech.jpg"]', { state: 'visible' });
@@ -55,11 +125,7 @@ await page.click('.color-circle.hover-image[data-image="/dist/img/color/medium/o
 
 
 // 12️⃣ Kliknout na button "postup na krok → 4. Sklo"
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickBySelector(page, '#snippet--prevAndNextStep div:nth-child(3) > a > button');
 
 // Locator pro tlačítko "Trojskla" pomocí XPath
 const tripleGlassButton = page.locator('//*[@id="snippet--glassCategories-a"]/div/div/span[2]/a/span/img');
@@ -71,11 +137,7 @@ await tripleGlassButton.waitFor({ state: 'visible' });
 await tripleGlassButton.click();
 
 // 12️⃣ Kliknout na button "postup na krok → 5. Parapety"
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickBySelector(page, '#snippet--prevAndNextStep div:nth-child(3) > a > button');
 
 
 // 🧱 KROK: Volba šířky/hloubky vnitřního parapetu
@@ -124,11 +186,7 @@ await colorWhiteOuterLink.click({ force: true });
 
 
 // 12️⃣ Kliknout na button "postup na krok → 6. stínící"
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickBySelector(page, '#snippet--prevAndNextStep div:nth-child(3) > a > button');
 
 //zvol bvenkovní žaluzie
 await page.click('img[src="/dist/img/shielding/venkovni-zaluzie.png"]');
@@ -155,18 +213,10 @@ await page.getByRole('button', { name: 'POTVRDIT VÝBĚR' }).click();
 await page.getByRole('button', { name: /postup na krok.*7\. Sítě/i }).click();
 
 // 12️⃣ Kliknout na button "postup na krok → 8. montáž"
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickBySelector(page, '#snippet--prevAndNextStep div:nth-child(3) > a > button');
 
 // 12️⃣ Kliknout na button "postup na krok → 9. závěr"
-// Počkej, až bude tlačítko viditelné a interaktivní
-await nextButton.waitFor({ state: 'visible' });
-
-// Klikni na tlačítko
-await nextButton.click();
+await clickBySelector(page, '#snippet--prevAndNextStep div:nth-child(3) > a > button');
 
 //nezávazná kalkulace-konec
 const button = page.locator('//*[@id="snippet--finish"]/div[2]/div/div[1]/div/span[2]/button');
@@ -218,31 +268,6 @@ await test.step('Vyplnění emailu', async () => {
   await emailInput.fill('czernekadam@centrum.cz');
 });
 
-//kliknu na odeslat
-await test.step('🧱 KROK: Kliknutí na tlačítko ODESLAT', async () => {
-  const odeslatBtn = page.locator('//*[@id="frm-productList-sendOfferForm"]/div[3]/div[2]/button');
-
-  // Počká, až bude tlačítko viditelné
-  await odeslatBtn.waitFor({ state: 'visible' });
-
-  // Scrollne, pokud je mimo viewport
-  await odeslatBtn.scrollIntoViewIfNeeded();
-
-  // Klikne na tlačítko
-  await odeslatBtn.click();
-});
-
-await test.step('🧱 KROK: Ověření úspěšného odeslání cenové nabídky', async () => {
-  const successMessage = page.locator('text=Úspěch: Děkujeme za Váš zájem o naše výrobky');
-  await successMessage.waitFor({ state: 'visible' });
-
-// Volitelně můžeš zkontrolovat celý text
-await test.step('🧱 KROK: Ověření úspěšného odeslání cenové nabídky', async () => {
-  const successMessage = page.locator('text=Úspěch: Děkujeme za Váš zájem o naše výrobky');
-  await successMessage.waitFor({ state: 'visible' });
-  await expect(successMessage).toBeVisible(); // jen ověří, že je viditelné
-});
-});
 
 
 });
